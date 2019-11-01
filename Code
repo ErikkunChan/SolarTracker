@@ -1,0 +1,189 @@
+#include <Servo.h> // include Servo library 
+
+// 180 horizontal MAX
+Servo horizontal; // horizontal servo
+int servoh = 180;   // 90;     // stand horizontal servo
+
+int servohLimitHigh = 180;
+int servohLimitLow = 65;
+
+// 65 degrees MAX
+Servo vertical;   // vertical servo 
+int servov = 45;  //   90;     // stand vertical servo
+
+int servovLimitHigh = 80;
+int servovLimitLow = 15;
+
+
+// LDR pin connections
+//  name  = analogpin;
+int ldrlt = A0; //LDR top left - BOTTOM LEFT  
+int ldrrt = A1; //LDR top rigt - BOTTOM RIGHT 
+int ldrld = A2; //LDR down left - TOP LEFT
+int ldrrd = A3; //ldr down rigt - TOP RIGHT
+
+// VOLTAGE SENSOR DECLARATIONS
+int analogInput = A5;
+float vout = 0.0;
+float vin = 0.0;
+float R1 = 30000.0; //  
+float R2 = 7500.0; // 
+int value = 0;
+
+// Bluetooth Declarations
+#include <SoftwareSerial.h> //To use the SoftwareSerial libary
+
+SoftwareSerial myBluetooth(4, 5); //Define a Bluetooth software serial that use
+								  // Arduino’s port4 as rxPin and port5 as txPin, i.e., connects
+								  // Bluetooth’s TX pin to Arduino port4, RX pin to Arduino port5.
+
+//Timers
+int dtime1 = 1000;
+int dtime2 = 50;
+
+void setup()
+{
+	Serial.begin(9600);
+
+	// ***BLUETOOTH******
+	Serial.println("Hello, Serial Monitor is activated!");
+	pinMode(4, INPUT); //Set Arduino’s port4 as INPUT
+	pinMode(5, OUTPUT); //Set Arduino’s port5 as OUTPUT
+
+	// *******************analogRead SETUPS*******************
+	pinMode(A0, INPUT);
+	pinMode(A1, INPUT);
+	pinMode(A2, INPUT);
+	pinMode(A3, INPUT);
+	pinMode(A4, OUTPUT);
+
+	myBluetooth.begin(9600); // Set Bluetooth baud rate. Check the datasheet!!
+	myBluetooth.println("Hello, Bluetooth is activated!");
+	//*********************************
+
+	// servo connections
+	// name.attacht(pin);
+	horizontal.attach(9);
+	vertical.attach(10);
+	horizontal.write(180);
+	vertical.write(45);
+}
+
+void loop()
+{
+	timers();
+}
+
+void loop1()
+{
+	// read the value at analog input
+	value = analogRead(analogInput);
+	vout = (value * 5.0) / 1024.0; // see text
+	vin = (vout / (R2 / (R1 + R2))) / 2;
+
+	Serial.print("The precise voltage from the light is: ");
+	Serial.println(vin, 2);
+
+	// ********************BLUETOORTH******************//
+	//*************************************************//
+
+	if (myBluetooth.available())             //Detect any data being received by Bluetooth
+											 //Use “read()” to read in data received by Bluetooth RX pin, then use
+											 //Use Serial.println() to display the data on the Serial Monitor
+		Serial.write(myBluetooth.read());
+	if (Serial.available())                  //Ready to send data from Serial Monitor
+											 //Read the data typed in Serial Monitor, then send to Bluetooth TX pin.
+		myBluetooth.write(Serial.read());
+	//******************************************************
+}
+void loop2()
+{
+	int lt = analogRead(ldrlt); // top left
+	int rt = analogRead(ldrrt); // top right
+	int ld = analogRead(ldrld); // down left
+	int rd = analogRead(ldrrd); // down rigt
+
+	// int dtime = analogRead(4)/20; // read potentiometers  
+	// int tol = analogRead(5)/4;
+
+	int tol = 50;
+
+	int avt = (lt + rt) / 2; // average value top
+	int avd = (ld + rd) / 2; // average value down
+	int avl = (lt + ld) / 2; // average value left
+	int avr = (rt + rd) / 2; // average value right
+
+	int dvert = avt - avd; // check the diffirence of up and down
+	int dhoriz = avl - avr;// check the diffirence og left and rigt
+
+	if (-1 * tol > dvert || dvert > tol) // check if the diffirence is in the tolerance else change vertical angle
+	{
+		if (avt > avd)
+		{
+			servov = ++servov;
+			if (servov > servovLimitHigh)
+			{
+				servov = servovLimitHigh;
+			}
+		}
+		else if (avt < avd)
+		{
+			servov = --servov;
+			if (servov < servovLimitLow)
+			{
+				servov = servovLimitLow;
+			}
+		}
+		vertical.write(servov);
+	}
+
+	if (-1 * tol > dhoriz || dhoriz > tol) // check if the diffirence is in the tolerance else change horizontal angle
+	{
+		if (avl > avr)
+		{
+			servoh = --servoh;
+			if (servoh < servohLimitLow)
+			{
+				servoh = servohLimitLow;
+			}
+		}
+		else if (avl < avr)
+		{
+			servoh = ++servoh;
+			if (servoh > servohLimitHigh)
+			{
+				servoh = servohLimitHigh;
+			}
+		}
+		else if (avl = avr)
+		{
+			// nothing
+		}
+		horizontal.write(servoh);
+	}
+}
+
+void timers()
+{
+	static long prev = 0;           // Creates static variable that remains in memory. 
+	long now = millis();
+	short diff = now - prev;        // Finds the difference between the last time it ran and the now time. 
+
+	static short lp1t = 0;
+	lp1t += diff;
+	if (lp1t > dtime1)
+	{
+		loop1();
+		lp1t -= dtime1;       // Loop timer is reset back to its original value.
+	}
+
+	static short lp2t = 0;
+	lp2t += diff;
+	if (lp2t > dtime2)
+	{
+		loop2();
+		lp2t -= dtime2;     // Loop timer is reset back to its original value.
+	}
+
+	prev = now;
+}
